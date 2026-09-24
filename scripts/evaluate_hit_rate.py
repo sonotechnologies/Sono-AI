@@ -2,6 +2,11 @@
 user's loved titles, recompute their taste vector without them, and check
 how many land back in their top-50 nearest-neighbor picks.
 
+"Loved" means a 5-star rating OR a 👍 swipe-like -- the app's ongoing
+feedback loop (Tonight/Discover cards) only ever produces swipe-likes after
+onboarding, so restricting this to explicit 5-star ratings alone would
+starve the test of data for anyone who never revisits onboarding.
+
 Uses the same weighting/decay logic as the live engine
 (scripts/common/taste_engine.py) but ranks by pure taste-vector similarity,
 skipping availability/dislike-penalty/diversity -- this test measures
@@ -41,7 +46,8 @@ def evaluate_user(sb, user_id: str) -> dict:
     )
     loved_ids = [
         i["title_id"] for i in interactions
-        if i["kind"] == "rating" and (i["value"] or 0) >= LOVED_RATING_THRESHOLD
+        if (i["kind"] == "rating" and (i["value"] or 0) >= LOVED_RATING_THRESHOLD)
+        or (i["kind"] == "swipe" and i["value"] == 1)
     ]
 
     if len(loved_ids) < MIN_LOVED_FOR_TEST:
