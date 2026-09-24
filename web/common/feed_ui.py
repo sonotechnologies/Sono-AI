@@ -9,6 +9,8 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from scripts.common.taste_engine import compute_taste_vectors, get_recommendations
 
+PLACEHOLDER_POSTER = "https://placehold.co/300x450/1a1c23/f1f1f1?text=No+Poster"
+
 
 def render_feed(sb, user_id: str, feed_name: str, country: str = "US"):
     state_key = f"{feed_name}_data"
@@ -34,16 +36,19 @@ def render_feed(sb, user_id: str, feed_name: str, country: str = "US"):
 
     for r, imp_id in zip(data["results"], data["impression_ids"]):
         with st.container(border=True):
-            cols = st.columns([3, 1, 1, 1])
-            cols[0].markdown(f"**{r['title']}** ({r['year']}) — *{r['type']}*")
-            cols[0].caption(r["why"])
-
-            if cols[1].button("👍", key=f"{feed_name}_like_{r['id']}"):
-                _act(sb, user_id, r["id"], imp_id, kind="swipe", value=1, action="save")
-            if cols[2].button("👎", key=f"{feed_name}_dislike_{r['id']}"):
-                _act(sb, user_id, r["id"], imp_id, kind="swipe", value=-1, action="dismiss")
-            if cols[3].button("✅", key=f"{feed_name}_watched_{r['id']}"):
-                _act(sb, user_id, r["id"], imp_id, kind="watched", value=None, action="watched")
+            cols = st.columns([1, 3])
+            with cols[0]:
+                st.image(r.get("poster_url") or PLACEHOLDER_POSTER, use_container_width=True)
+            with cols[1]:
+                st.markdown(f"**{r['title']}** ({r['year']}) — *{r['type']}*")
+                st.caption(r["why"])
+                b1, b2, b3 = st.columns(3)
+                if b1.button("👍 Like", key=f"{feed_name}_like_{r['id']}", use_container_width=True):
+                    _act(sb, user_id, r["id"], imp_id, kind="swipe", value=1, action="save")
+                if b2.button("👎 Pass", key=f"{feed_name}_dislike_{r['id']}", use_container_width=True):
+                    _act(sb, user_id, r["id"], imp_id, kind="swipe", value=-1, action="dismiss")
+                if b3.button("✅ Watched", key=f"{feed_name}_watched_{r['id']}", use_container_width=True):
+                    _act(sb, user_id, r["id"], imp_id, kind="watched", value=None, action="watched")
 
 
 def _act(sb, user_id, title_id, impression_id, kind, value, action):

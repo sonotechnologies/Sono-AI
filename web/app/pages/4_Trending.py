@@ -1,6 +1,7 @@
 """Weekly trending lists, labeled by source. Never present TMDB popularity
 as viewership, and never blend sources -- Netflix/TMDB/MAL each get their
-own labeled section."""
+own labeled section. Tabbed by content type + poster grid so checking
+rankings doesn't mean scrolling through a wall of text."""
 import os
 import sys
 
@@ -9,19 +10,24 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 from web.common.auth import require_login, logout_button, get_authed_client
+from web.common.theme import apply_theme
+from web.common.feed_ui import PLACEHOLDER_POSTER
 from scripts.common.taste_engine import parse_vector
 
-st.set_page_config(page_title="Trending — Sono AI", page_icon="🎬")
+st.set_page_config(page_title="Trending — Sono AI", page_icon="🔥")
+apply_theme()
 
 user_id = require_login()
 logout_button()
 sb = get_authed_client()
 
-st.title("Trending")
+st.title("🔥 Trending")
 
 LIST_LABELS = {"tmdb": "TMDB", "mal": "MyAnimeList", "netflix": "Netflix Top 10", "app": "Trending on Sono AI"}
-TYPE_LABELS = {"movie": "Movies", "series": "Series", "anime": "Anime"}
+TYPE_ORDER = ["movie", "series", "anime"]
+TYPE_LABELS = {"movie": "🎥 Movies", "series": "📺 Series", "anime": "🇯🇵 Anime"}
 TASTE_MATCH_THRESHOLD = 0.5
+POSTERS_PER_ROW = 3
 
 
 @st.cache_data(ttl=1800)
@@ -34,7 +40,7 @@ def get_latest_week():
 def get_trending_rows(week: str):
     return (
         sb.table("trending")
-        .select("list,type,rank,titles(id,title,year,vote_avg,embedding)")
+        .select("list,type,rank,titles(id,title,year,vote_avg,poster_url,embedding)")
         .eq("week", week)
         .order("list")
         .order("rank")
@@ -62,18 +68,25 @@ if not week:
     st.info("No trending data yet — run scripts/sync_trending.py.")
 else:
     st.caption(f"Week of {week}")
-    rows = get_trending_rows(week)
+    rows = [r for r in get_trending_rows(week) if r.get("titles")]
 
-    groups = {}
-    for r in rows:
-        if not r.get("titles"):
-            continue
-        key = (r["list"], r["type"])
-        groups.setdefault(key, []).append(r)
+    present_types = [t for t in TYPE_ORDER if any(r["type"] == t for r in rows)]
+    tabs = st.tabs([TYPE_LABELS[t] for t in present_types])
 
-    for (list_name, type_name), items in sorted(groups.items()):
-        st.header(f"{LIST_LABELS.get(list_name, list_name)} — {TYPE_LABELS.get(type_name, type_name)}")
-        for item in sorted(items, key=lambda x: x["rank"]):
-            t = item["titles"]
-            badge = " ✨ matches your taste" if matches_taste(t.get("embedding")) else ""
-            st.markdown(f"**#{item['rank']}. {t['title']}** ({t.get('year', '?')}){badge}")
+    for tab, type_name in zip(tabs, present_types):
+        with tab:
+            type_rows = [r for r in rows if r["type"] == type_name]
+            lists_present = sorted({r["list"] for r in type_rows})
+
+            for list_name in lists_present:
+                st.subheader(LIST_LABELS.get(list_name, list_name))
+                items = sorted((r for r in type_rows if r["list"] == list_name), key=lambda x: x["rank"])
+
+                for row_start in range(0, len(items), POSTERS_PER_ROW):
+                    cols = st.columns(POSTERS_PER_ROW)
+                    for col, item in zip(cols, items[row_start:row_start + POSTERS_PER_ROW]):
+                        t = item["titles"]
+                        with col:
+                            st.image(t.get("poster_url") or PLACEHOLDER_POSTER, use_container_width=True)
+                            badge = " ✨" if matches_taste(t.get("embedding")) else ""
+                            st.caption(f"#{item['rank']} · {t['title']}{badge}")

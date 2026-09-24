@@ -113,6 +113,9 @@ def parse_row(media_type: str, data: dict) -> dict:
         episode_run_time = data.get("episode_run_time") or []
         runtime = episode_run_time[0] if episode_run_time else None
 
+    poster_path = data.get("poster_path")
+    poster_url = f"https://image.tmdb.org/t/p/w342{poster_path}" if poster_path else None
+
     return {
         "tmdb_id": data.get("id"),
         "type": "movie" if is_movie else "series",
@@ -126,6 +129,7 @@ def parse_row(media_type: str, data: dict) -> dict:
         "runtime": runtime,
         "vote_avg": data.get("vote_average"),
         "vote_count": data.get("vote_count"),
+        "poster_url": poster_url,
     }
 
 

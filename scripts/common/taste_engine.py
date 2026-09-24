@@ -204,7 +204,7 @@ def get_recommendations(sb, user_id: str, feed: str, limit: int = 10, country: s
     if like_vector is None:
         pool = (
             sb.table("titles")
-            .select("id,title,type,year,genres,vote_avg,vote_count,embedding")
+            .select("id,title,type,year,genres,vote_avg,vote_count,embedding,poster_url")
             .not_.is_("embedding", "null")
             .gte("vote_count", QUALITY_MIN_VOTE_COUNT)
             .order("vote_avg", desc=True)
@@ -343,4 +343,5 @@ def _format_result(row, feed, user_services, country, liked_titles, liked_genre_
         "why": _why_line(row, best_match, shared_genre, on_service),
         "on_service": on_service,
         "feed": feed,
+        "poster_url": row.get("poster_url"),
     }

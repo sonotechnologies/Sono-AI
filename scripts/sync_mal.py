@@ -31,7 +31,7 @@ BASE_URL = "https://api.myanimelist.net/v2"
 PAGE_SIZE = 100
 MAX_RETRIES = 5
 REQUEST_DELAY = 0.5  # seconds between requests; MAL doesn't publish a hard limit, stay conservative
-FIELDS = "synopsis,genres,mean,num_scoring_users,studios,average_episode_duration,start_date,media_type"
+FIELDS = "synopsis,genres,mean,num_scoring_users,studios,average_episode_duration,start_date,media_type,main_picture"
 
 
 def make_session() -> requests.Session:
@@ -79,6 +79,8 @@ def parse_row(node: dict) -> dict:
         except ValueError:
             year = None
 
+    picture = node.get("main_picture") or {}
+
     return {
         "mal_id": node.get("id"),
         "type": "anime",
@@ -93,6 +95,7 @@ def parse_row(node: dict) -> dict:
         "vote_avg": node.get("mean"),
         "vote_count": node.get("num_scoring_users"),
         "tone_tags": studios,
+        "poster_url": picture.get("large") or picture.get("medium"),
     }
 
 
