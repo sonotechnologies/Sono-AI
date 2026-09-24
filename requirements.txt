@@ -4,3 +4,4 @@ supabase
 sentence-transformers
 numpy
 streamlit
+scikit-learn

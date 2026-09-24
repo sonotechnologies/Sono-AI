@@ -6,6 +6,12 @@
       "runtimeExecutable": "venv/Scripts/streamlit.exe",
       "runtimeArgs": ["run", "web/search.py", "--server.headless", "true"],
       "port": 8501
+    },
+    {
+      "name": "sono-app",
+      "runtimeExecutable": "venv/Scripts/streamlit.exe",
+      "runtimeArgs": ["run", "web/app/Home.py", "--server.headless", "true", "--server.port", "8600"],
+      "port": 8600
     }
   ]
 }
