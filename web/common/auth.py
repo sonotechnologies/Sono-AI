@@ -61,13 +61,30 @@ def _promote_hash_to_query_params():
     )
 
 
+def _friendly_auth_error(e: Exception) -> str:
+    """Maps common Supabase auth failures to a message a non-technical
+    friend testing the app can actually act on."""
+    text = str(e).lower()
+    if "rate limit" in text or "429" in text:
+        return "Too many sign-in emails have been sent recently. Please wait about an hour and try again."
+    if "otp_expired" in text or "token not found" in text or "invalid or has expired" in text:
+        return (
+            "That sign-in link isn't valid anymore — it may have expired, or already been opened once "
+            "(some email apps auto-preview links, which can use them up). Request a new one below."
+        )
+    if "invalid" in text and "email" in text:
+        return "That doesn't look like a valid email address."
+    return "Something went wrong signing you in. Please try again in a moment."
+
+
 def _restore_from_query_params():
     if "user_id" in st.session_state:
         return
 
     params = st.query_params
     if "error" in params:
-        st.error(f"Sign-in link problem: {params.get('error_description', params.get('error'))}. Request a new one below.")
+        fake_error = Exception(params.get("error_description", params.get("error", "")))
+        st.error(_friendly_auth_error(fake_error))
         st.query_params.clear()
         return
 
@@ -84,7 +101,7 @@ def _restore_from_query_params():
         st.session_state["user_id"] = res.user.id
         _save_session_cookie(tokens)
     except Exception as e:
-        st.error(f"Couldn't complete sign-in: {e}")
+        st.error(_friendly_auth_error(e))
     finally:
         st.query_params.clear()
         st.rerun()
@@ -131,11 +148,14 @@ def login_widget():
     email = st.text_input("Email", key="login_email")
 
     if st.button("Send sign-in link", type="primary"):
-        try:
-            sb.auth.sign_in_with_otp({"email": email})
-            st.success("Check your email and click the link to sign in.")
-        except Exception as e:
-            st.error(f"Couldn't send the link: {e}")
+        if not email or "@" not in email:
+            st.warning("Enter a valid email address first.")
+        else:
+            try:
+                sb.auth.sign_in_with_otp({"email": email})
+                st.success("Check your email and click the link to sign in. It'll only work once, so click it as soon as it arrives.")
+            except Exception as e:
+                st.error(_friendly_auth_error(e))
 
 
 def require_login() -> str:
