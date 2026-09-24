@@ -36,19 +36,19 @@ DISCOVER_BAND_START = 60  # skip the closest matches; that's Tonight's territory
 DISCOVER_BAND_END = 250
 
 
-def _parse_vector(raw):
+def parse_vector(raw):
     if raw is None:
         return None
     return np.array(json.loads(raw) if isinstance(raw, str) else raw, dtype=float)
 
 
-def _decay(created_at: str, now: datetime.datetime) -> float:
+def decay(created_at: str, now: datetime.datetime) -> float:
     created = datetime.datetime.fromisoformat(created_at.replace("Z", "+00:00"))
     days = (now - created).total_seconds() / 86400
     return 0.5 ** (days / DECAY_HALF_LIFE_DAYS)
 
 
-def _interaction_weight(kind: str, value) -> tuple[float, float]:
+def interaction_weight(kind: str, value) -> tuple[float, float]:
     """Returns (like_weight, dislike_weight) base weights for one interaction."""
     rating_bucket = int(value) if kind == "rating" and value is not None else None
     like = LIKE_WEIGHTS.get((kind, rating_bucket), 0.0)
@@ -87,7 +87,7 @@ def compute_taste_vectors(sb, user_id: str) -> dict:
         .execute()
         .data
     )
-    embeddings_by_id = {t["id"]: _parse_vector(t["embedding"]) for t in titles}
+    embeddings_by_id = {t["id"]: parse_vector(t["embedding"]) for t in titles}
 
     now = datetime.datetime.now(datetime.timezone.utc)
     like_sum = np.zeros(384)
@@ -99,16 +99,16 @@ def compute_taste_vectors(sb, user_id: str) -> dict:
         emb = embeddings_by_id.get(i["title_id"])
         if emb is None:
             continue
-        like_base, dislike_base = _interaction_weight(i["kind"], i["value"])
+        like_base, dislike_base = interaction_weight(i["kind"], i["value"])
         if like_base == 0.0 and dislike_base == 0.0:
             continue
-        decay = _decay(i["created_at"], now)
+        decay_factor = decay(i["created_at"], now)
         if like_base:
-            w = like_base * decay
+            w = like_base * decay_factor
             like_sum += w * emb
             like_weight_sum += w
         if dislike_base:
-            w = dislike_base * decay
+            w = dislike_base * decay_factor
             dislike_sum += w * emb
             dislike_weight_sum += w
 
@@ -191,8 +191,8 @@ def get_recommendations(sb, user_id: str, feed: str, limit: int = 10, country: s
     profile = sb.table("user_taste_vectors").select("*").eq("user_id", user_id).limit(1).execute().data
     profile = profile[0] if profile else {"like_vector": None, "dislike_vector": None, "interaction_count": 0}
 
-    like_vector = _parse_vector(profile.get("like_vector"))
-    dislike_vector = _parse_vector(profile.get("dislike_vector"))
+    like_vector = parse_vector(profile.get("like_vector"))
+    dislike_vector = parse_vector(profile.get("dislike_vector"))
     interaction_count = profile.get("interaction_count") or 0
 
     user_row = sb.table("users").select("services").eq("id", user_id).limit(1).execute().data
@@ -213,7 +213,7 @@ def get_recommendations(sb, user_id: str, feed: str, limit: int = 10, country: s
             .data
         )
         for row in pool:
-            row["_embedding"] = _parse_vector(row["embedding"])
+            row["_embedding"] = parse_vector(row["embedding"])
         pool = [r for r in pool if r["id"] not in seen_title_ids]
         top = _apply_diversity(pool, limit)
         return [_format_result(r, feed, user_services, country, None, None, sb) for r in top]
@@ -227,7 +227,7 @@ def get_recommendations(sb, user_id: str, feed: str, limit: int = 10, country: s
     }).execute().data
 
     for row in raw_candidates:
-        row["_embedding"] = _parse_vector(row["embedding"])
+        row["_embedding"] = parse_vector(row["embedding"])
 
     raw_candidates = [r for r in raw_candidates if _quality_ok(r)]
 
@@ -296,7 +296,7 @@ def _fetch_liked_titles(sb, user_id: str, max_titles: int = 30) -> list[dict]:
     )
     liked_ids = []
     for i in interactions:
-        like_base, _ = _interaction_weight(i["kind"], i["value"])
+        like_base, _ = interaction_weight(i["kind"], i["value"])
         if like_base > 0:
             liked_ids.append(i["title_id"])
     liked_ids = liked_ids[:max_titles]
@@ -304,7 +304,7 @@ def _fetch_liked_titles(sb, user_id: str, max_titles: int = 30) -> list[dict]:
         return []
     rows = sb.table("titles").select("id,title,genres,embedding").in_("id", liked_ids).execute().data
     for r in rows:
-        r["_embedding"] = _parse_vector(r["embedding"])
+        r["_embedding"] = parse_vector(r["embedding"])
     return rows
 
 
