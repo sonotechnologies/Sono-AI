@@ -28,10 +28,20 @@ APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8501").rstrip("/")
 AUTH_REDIRECT_URL = f"{APP_BASE_URL}/app/static/auth-redirect.html"
 
 
+_CM_WIDGET_KEY = "sono_cookies"
+_CM_STATE_KEY = "_sono_cookie_manager"
+
+
+def _init_cookie_manager():
+    """CookieManager is a widget, so it must be rendered exactly once per
+    script run. Streamlit reserves session_state[widget_key] for the
+    widget's own value, so the instance is stashed under a different key
+    for helpers called later in the same run."""
+    st.session_state[_CM_STATE_KEY] = stx.CookieManager(key=_CM_WIDGET_KEY)
+
+
 def _get_cookie_manager() -> stx.CookieManager:
-    if "cookie_manager" not in st.session_state:
-        st.session_state["cookie_manager"] = stx.CookieManager(key="cookie_manager")
-    return st.session_state["cookie_manager"]
+    return st.session_state[_CM_STATE_KEY]
 
 
 def _save_session_cookie(tokens: dict):
@@ -152,6 +162,7 @@ def require_login() -> str:
     """Renders a login form and halts the page if not logged in.
     Returns the user_id if already logged in (including via a magic-link
     redirect just landed, or a restored cookie session)."""
+    _init_cookie_manager()
     _restore_from_query_params()
     _restore_from_cookie()
     if "user_id" not in st.session_state:
