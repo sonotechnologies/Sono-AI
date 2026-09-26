@@ -78,10 +78,15 @@ def _restore_from_query_params():
     if "user_id" in st.session_state:
         return
 
+    # Errors go into session_state rather than straight to st.error: the
+    # cookie widget's first render triggers a rerun, which would wipe a
+    # message shown only in this run (the query params are already gone by
+    # then). No st.rerun() after success either, so the cookie write isn't
+    # cut off -- the rest of this run already sees the logged-in state.
     params = st.query_params
     if "error" in params:
         fake_error = Exception(params.get("error_description", params.get("error", "")))
-        st.error(_friendly_auth_error(fake_error))
+        st.session_state["_auth_error"] = _friendly_auth_error(fake_error)
         st.query_params.clear()
         return
 
@@ -96,12 +101,12 @@ def _restore_from_query_params():
         tokens = {"access_token": res.session.access_token, "refresh_token": res.session.refresh_token}
         st.session_state["session"] = tokens
         st.session_state["user_id"] = res.user.id
+        st.session_state.pop("_auth_error", None)
         _save_session_cookie(tokens)
     except Exception as e:
-        st.error(_friendly_auth_error(e))
+        st.session_state["_auth_error"] = _friendly_auth_error(e)
     finally:
         st.query_params.clear()
-        st.rerun()
 
 
 def _restore_from_cookie():
@@ -117,7 +122,9 @@ def _restore_from_cookie():
         return
 
     try:
-        stored = json.loads(raw)
+        # The component's frontend (universal-cookie) auto-parses JSON
+        # cookie values, so this usually arrives as a dict already.
+        stored = raw if isinstance(raw, dict) else json.loads(raw)
         sb = get_client(use_service_key=False)
         res = sb.auth.refresh_session(stored["refresh_token"])
         tokens = {"access_token": res.session.access_token, "refresh_token": res.session.refresh_token}
@@ -142,9 +149,12 @@ def login_widget():
     sb = get_client(use_service_key=False)
     st.subheader("Sign in")
     st.caption("We'll email you a sign-in link — no password needed.")
+    if st.session_state.get("_auth_error"):
+        st.error(st.session_state["_auth_error"])
     email = st.text_input("Email", key="login_email")
 
     if st.button("Send sign-in link", type="primary"):
+        st.session_state.pop("_auth_error", None)
         if not email or "@" not in email:
             st.warning("Enter a valid email address first.")
         else:
