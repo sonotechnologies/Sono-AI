@@ -8,12 +8,31 @@
   <p>Signing you in…</p>
   <script>
     // Supabase's magic-link redirect lands here with tokens in the URL
-    // fragment (#access_token=...), which a normal top-level page (unlike
-    // a Streamlit component's sandboxed iframe) is free to read and
-    // navigate away from. Convert it to a query string the Streamlit app
-    // can actually read server-side, then redirect there.
+    // fragment (#access_token=...), which never reaches the Python server.
+    // Convert it to a query string st.query_params can read.
+    //
+    // Locally this page is the top-level document. On Streamlit Community
+    // Cloud it runs inside the Cloud wrapper's sandboxed iframe (served
+    // under /~/+/), which can't navigate the top page and doesn't receive
+    // the fragment -- but it is same-origin, so it can read the top URL's
+    // fragment and navigate its own frame.
     var hash = window.location.hash;
-    var target = window.location.origin + "/";
+    var isFramed = window.top !== window;
+    if ((!hash || hash.length <= 1) && isFramed) {
+      try { hash = window.top.location.hash; } catch (e) {}
+    }
+
+    var staticSuffix = /app\/static\/auth-redirect\.html$/;
+    var appRoot = window.location.pathname.replace(staticSuffix, "");
+
+    // Keep the tokens out of the visible address bar / history.
+    if (isFramed) {
+      try {
+        window.top.history.replaceState(null, "", window.top.location.pathname.replace(staticSuffix, ""));
+      } catch (e) {}
+    }
+
+    var target = appRoot;
     if (hash && hash.length > 1) {
       target += "?" + hash.substring(1);
     }
