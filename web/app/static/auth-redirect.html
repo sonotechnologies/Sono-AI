@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Signing you in…</title>
+</head>
+<body style="background:#0e0f13;color:#f1f1f1;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+  <p>Signing you in…</p>
+  <script>
+    // Supabase's magic-link redirect lands here with tokens in the URL
+    // fragment (#access_token=...), which a normal top-level page (unlike
+    // a Streamlit component's sandboxed iframe) is free to read and
+    // navigate away from. Convert it to a query string the Streamlit app
+    // can actually read server-side, then redirect there.
+    var hash = window.location.hash;
+    var target = window.location.origin + "/";
+    if (hash && hash.length > 1) {
+      target += "?" + hash.substring(1);
+    }
+    window.location.replace(target);
+  </script>
+</body>
+</html>

@@ -3,9 +3,13 @@ browser refreshes via a cookie holding the Supabase refresh token.
 
 Supabase's magic-link redirect carries tokens in the URL *fragment*
 (#access_token=...), which never reaches the Python server -- only
-JavaScript in the browser can read it. A tiny injected script promotes
-that fragment into a query string on load, which Streamlit can read via
-st.query_params.
+JavaScript in the browser can read it. A Streamlit component's iframe is
+sandboxed against navigating the top-level page (confirmed: it silently
+no-ops), so the fragment->query conversion happens on a plain static HTML
+page instead (web/app/static/auth-redirect.html), which has no such
+sandbox. Supabase is configured to redirect there, and that page bounces
+back to the app root with the tokens as query params, which
+st.query_params can read.
 """
 import datetime
 import json
@@ -14,13 +18,14 @@ import sys
 
 import extra_streamlit_components as stx
 import streamlit as st
-import streamlit.components.v1 as components
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from scripts.common.db import get_client
 
 COOKIE_NAME = "sono_session"
 COOKIE_MAX_AGE_DAYS = 30
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8501").rstrip("/")
+AUTH_REDIRECT_URL = f"{APP_BASE_URL}/app/static/auth-redirect.html"
 
 
 def _get_cookie_manager() -> stx.CookieManager:
@@ -41,24 +46,6 @@ def _clear_session_cookie():
         cm.delete(COOKIE_NAME, key="delete_session_cookie")
     except KeyError:
         pass  # cookie was already gone
-
-
-def _promote_hash_to_query_params():
-    """Runs once per page load; if the URL has a Supabase auth fragment,
-    turns it into a query string so Python can see it, via a full
-    (same-page) navigation."""
-    components.html(
-        """
-        <script>
-        const hash = window.top.location.hash;
-        if (hash && (hash.includes('access_token') || hash.includes('error'))) {
-            const params = hash.substring(1);
-            window.top.location.href = window.top.location.pathname + '?' + params;
-        }
-        </script>
-        """,
-        height=0,
-    )
 
 
 def _friendly_auth_error(e: Exception) -> str:
@@ -152,7 +139,10 @@ def login_widget():
             st.warning("Enter a valid email address first.")
         else:
             try:
-                sb.auth.sign_in_with_otp({"email": email})
+                sb.auth.sign_in_with_otp({
+                    "email": email,
+                    "options": {"email_redirect_to": AUTH_REDIRECT_URL},
+                })
                 st.success("Check your email and click the link to sign in. It'll only work once, so click it as soon as it arrives.")
             except Exception as e:
                 st.error(_friendly_auth_error(e))
@@ -162,7 +152,6 @@ def require_login() -> str:
     """Renders a login form and halts the page if not logged in.
     Returns the user_id if already logged in (including via a magic-link
     redirect just landed, or a restored cookie session)."""
-    _promote_hash_to_query_params()
     _restore_from_query_params()
     _restore_from_cookie()
     if "user_id" not in st.session_state:
